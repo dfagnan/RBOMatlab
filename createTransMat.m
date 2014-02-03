@@ -44,17 +44,32 @@ function mat=createTransMat(appValue,costs,disc,dur,steady,target)
 %			milestone(i)=upfront(i)/2
 		
 			stdvalue(i)=value(i)*2240/1870;
-		
-			vsigma(i)=sqrt(log(1+stdvalue(i)^2/value(i)^2));
-			vmu(i)= log(value(i))-0.5*vsigma(i)^2; 
-			
+			if value(i) < 1E-6 
+				if vmx(i) >1E-6
+					warning('Zero valuation and non-zero maximum not compatible, assuming identically zero.')
+				end
+				vmu(i)=0;
+				vmx(i)=0;
+				csigma(i)=1;
+			else
+				vsigma(i)=sqrt(log(1+stdvalue(i)^2/value(i)^2));
+				vmu(i)= log(value(i))-0.5*vsigma(i)^2; 
+				vmu(i)=convertLNtoCappedLN(vmu(i),vsigma(i),vmx(i),value(i));
+			end
 			vsigma(i)=0.939;
-			vmu(i)=convertLNtoCappedLN(vmu(i),vsigma(i),vmx(i),value(i));
-	
-			csigma(i)=sqrt(log(1+stdcost(i)^2/costs(i)^2));
-			cmu(i)=log(costs(i))-0.5*csigma(i)^2;
-			cmu(i)=convertLNtoCappedLN(cmu(i),csigma(i),cmx(i),costs(i));
 			
+			if costs(i) < 1E-6
+				if cmx(i) >1E-6
+					warning('Zero cost and non-zero maximum not compatible, assuming identically zero.')
+				end
+				cmu(i)=0;
+				cmx(i)=0;
+				csigma(i)=1;
+			else
+				csigma(i)=sqrt(log(1+stdcost(i)^2/costs(i)^2));
+				cmu(i)=log(costs(i))-0.5*csigma(i)^2;
+				cmu(i)=convertLNtoCappedLN(cmu(i),csigma(i),cmx(i),costs(i));
+			end
 		end
 		
 		budget = zeros(n+1,1);
