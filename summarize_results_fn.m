@@ -83,11 +83,11 @@ function summarize_results_fn (results,plot)
     fprintf(1,'\n# Simu: %d Horizon: %4.1f years_\n',results.params.simu.NSIMUS,NYEARS);
     fprintf(1,'\n--------- ASSET  ANALYSIS ----------\n\n');
 
-    fprintf(1,'Initial target portfoilio contains %d compounds:\n',NCOMPOUNDS);
-    printvec(results.params.simu.initial_compounds,results.params.simu.initial_compounds_col);
+    fprintf(1,'Initial target portfoilio:\n');
+    printmat(results.params.simu.initial_compounds,results.params.simu.initial_compounds_col,funding_col);
 
-    fprintf(1,'\nMean number of compounds initially purchased:\n');
-    printvec(mean(results.compounds_initially_bought,1),results.compounds_initially_bought_col);
+    fprintf(1,'\nMean number of compounds purchased:\n');
+    printmat(squeeze(mean(results.compounds_bought,1)),results.compounds_bought_col,funding_col);
 
     fprintf(1,'\nMean number of compounds exiting in each state:\n');
     printmat(exits,exits_col, exits_row,3);
