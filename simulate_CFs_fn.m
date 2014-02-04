@@ -502,7 +502,8 @@ end
         
 		for (i = 2:NPERS) % during life of bonds
 
-            cindxs     	=  phase2index_fn(compounds);
+            cindxs     			=  phase2index_fn(compounds);
+			cindxs(cindxs<=0) 	=  1;
 			%%OLD PARAMETER FILES NEED THIS
             %%%FutureCostEst  = (psindx>=1).*(assets.pricing_params(cindxs,assets.pricing_params_col.FutureCostEst)' - assets.pricing_params(psindx,assets.pricing_params_col.FutureCostEst));                        
         
