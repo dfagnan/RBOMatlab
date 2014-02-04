@@ -310,17 +310,21 @@ end
    	NSIMUS                = simu.NSIMUS;
    	NPERS                 = simu.TIMESTEPS;
    	HORIZON               = NPERS+ceil(max(assets.sale_time));
-   	NCOMPOUNDS            = sum(simu.initial_compounds) ;
+   	NCOMPOUNDS            = sum(simu.initial_compounds(:)) ;
 	ALL_POSSIBLE_STATES   = fieldnames(assets.trans_prob_col); %c("DSC","PRE","P1","P2","P3","NDA","APP")
-	NSTATES               = length(simu.initial_compounds); 
+	NSTATES               = size(simu.initial_compounds,2); %length(simu.initial_compounds); 
 	NBONDS                = length(bonds.capital_structure)-1;
-	STARTING_STATES       = repmat({'DSC'},1, simu.initial_compounds(1)) ;
+	STARTING_STATES       = {}; %repmat({'DSC'},1, simu.initial_compounds(1,1)) ;
 	AMORT_SCHED           = zeros(NBONDS,NPERS);
 
-	for ctr = 2:NSTATES
-		phase   =  ALL_POSSIBLE_STATES(ctr);
-        tmpcell = repmat(phase, 1, simu.initial_compounds(ctr));
-		STARTING_STATES = {STARTING_STATES{:} tmpcell{:} };
+    STARTING_PERIOD = []; 
+	for t=1:size(simu.initial_compounds,1)
+        for ctr = 1:NSTATES
+            phase   =  ALL_POSSIBLE_STATES(ctr);
+            tmpcell = repmat(phase, 1, simu.initial_compounds(1,ctr));
+            STARTING_STATES = {STARTING_STATES{:} tmpcell{:} };
+            STARTING_PERIOD = [STARTING_PERIOD repmat(t,1,length(tmpcell))];             
+        end
 	end
     
 	temp_bond_value = bonds.nominal;
@@ -339,7 +343,7 @@ end
 	rho               	= assets.rho;
 	bond_value        	= bonds.nominal;
 
-	invested            = true(1,NCOMPOUNDS);
+	%invested            = true(1,NCOMPOUNDS);
 	sell_value          = zeros(1,NCOMPOUNDS);
 	equity_in_compound  = ones(1,NCOMPOUNDS).*assets.equity_stake;
 	compounds           = STARTING_STATES;
@@ -416,10 +420,11 @@ end
         end
 		
 		% reset variables for next path of simulation
-		NCOMPOUNDS 			= sum(simu.initial_compounds);
+		NCOMPOUNDS 			= sum(simu.initial_compounds(:));
 		
 		% state of compounds
-		invested    		= true(1,NCOMPOUNDS);
+		invested    		= false(1,NCOMPOUNDS); %true(1,NCOMPOUNDS);
+        invested(STARTING_PERIOD==1) = true; 
 		compounds   		= STARTING_STATES;
         %compounds           = compounds(randperm(length(compounds)));
 		time_in_phase 		= zeros(1,NCOMPOUNDS);
@@ -461,17 +466,6 @@ end
         % If we have enough cash, buy it and update our initial cash
         %1/10*
         FutureCostEst  = (psindx>=1).*(assets.pricing_params(cindxs,assets.pricing_params_col.FutureCostEst)' - assets.pricing_params(psindx,assets.pricing_params_col.FutureCostEst));
-        for ctr = 1:NCOMPOUNDS
-            if (cash_left_to_spend 	>= (price_tmp(ctr) + FutureCostEst(ctr)))
-				money_spent(ctr)     =  price_tmp(ctr);
-				money_saved(ctr)     =  FutureCostEst(ctr);
-                cash_left_to_spend   =  cash_left_to_spend - price_tmp(ctr) - FutureCostEst(ctr);
-				cash(1)              = cash(1) - price_tmp(ctr);
-				num_compounds(cindxs(ctr)) =  num_compounds(cindxs(ctr)) + 1;
-			else 
-                compounds{ctr} = 'DSC';
-            end
-        end
         
 		cash(2)             = cash(1);
 		cash_begin_per(s,2) = cash(1);
@@ -507,6 +501,31 @@ end
 		z = randn(1);
         
 		for (i = 2:NPERS) % during life of bonds
+%if i==4, keyboard; end           
+            cindxs     	=  phase2index_fn(compounds);
+            cindxs(cindxs<=0) = 1; 
+            FutureCostEst  = (psindx>=1).*(assets.pricing_params(cindxs,assets.pricing_params_col.FutureCostEst)');            
+        %(psindx>=1).*(assets.pricing_params(cindxs,assets.pricing_params_col.FutureCostEst)' - assets.pricing_params(psindx,assets.pricing_params_col.FutureCostEst));                        
+            cash_left_to_spend = cash(i); 
+            for ctr = 1:NCOMPOUNDS
+               if STARTING_PERIOD < i-1
+                   cash_left_to_spend = cash_left_to_spend - FutureCostEst(ctr);
+               end
+            end
+            for ctr = 1:NCOMPOUNDS
+                if STARTING_PERIOD==i-1
+                    if (cash_left_to_spend 	>= (price_tmp(ctr) + FutureCostEst(ctr)))
+                        money_spent(ctr)     =  price_tmp(ctr);
+                        money_saved(ctr)     =  FutureCostEst(ctr);
+                        cash_left_to_spend   =  cash_left_to_spend - price_tmp(ctr) - FutureCostEst(ctr);
+                        cash(i)              = cash(i) - price_tmp(ctr);
+                        num_compounds(cindxs(ctr)) =  num_compounds(cindxs(ctr)) + 1;
+                    else 
+                        compounds{ctr} = 'DSC';
+                    end
+                end
+            end
+            
             current_cash  = cash(i);
 			current_guarantee  = guarantee(i);
     
@@ -654,8 +673,9 @@ end
                 
 				guarantee(i+1)        = guarantee(i);
                 guarantee_begin_per(s,i+1) = guarantee(i+1);
-			end
-		
+            end
+            
+            invested(STARTING_PERIOD==i) = true;
 				
 		end %for i = 2 : NPERS	%%END TIMESTEP ITERATION%%%%%
 

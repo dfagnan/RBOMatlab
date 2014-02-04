@@ -2,7 +2,7 @@ clear all;
 addpath '..'
 test_scripts = {@init_params_fn_NBTx_A @init_params_fn_NBTx_B};
 expected = [0.091 0.106];
-NSIMUS = 10000;
+NSIMUS = 1000; %10000;
 for i =1:length(expected)
     sprintf('Running Test %d\n',i)
     params = test_scripts{i}();
