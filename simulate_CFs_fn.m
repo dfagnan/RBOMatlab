@@ -343,7 +343,8 @@ end
 	rho               	= assets.rho;
 	bond_value        	= bonds.nominal;
 
-	%invested            = true(1,NCOMPOUNDS);
+	invested            = false(1,NCOMPOUNDS);
+    acquired            = false(1,NCOMPOUNDS);
 	sell_value          = zeros(1,NCOMPOUNDS);
 	equity_in_compound  = ones(1,NCOMPOUNDS).*assets.equity_stake;
 	compounds           = STARTING_STATES;
@@ -380,7 +381,7 @@ end
     compounds_funded_row   		= sales_row;
     compounds_funded_col   		= sale_times_col;
 
-	compounds_bought       		= zeros(NSIMUS, NSTATES);
+	compounds_bought       		= zeros(NSIMUS, HORIZON, NSTATES);
     compounds_bought_row   		= sales_row;
     compounds_bought_col   		= sales_col;
     
@@ -424,7 +425,7 @@ end
 		
 		% state of compounds
 		invested    		= false(1,NCOMPOUNDS); %true(1,NCOMPOUNDS);
-        invested(STARTING_PERIOD==1) = true; 
+        acquired            = false(1,NCOMPOUNDS);
 		compounds   		= STARTING_STATES;
         %compounds           = compounds(randperm(length(compounds)));
 		time_in_phase 		= zeros(1,NCOMPOUNDS);
@@ -454,10 +455,6 @@ end
         invest_cost = trial_cost_fn(compounds,params);
         
 		% temporary variables to make sure we spend only our target percentage
-	    cash_left_to_spend =  cash(1) - bonds.IC_pers*bonds.nominal(1)*bonds.coupon(1) -bonds.IC_pers*bonds.nominal(2)*bonds.coupon(2);
-	    % number of compounds we actually buy per phase
-	    num_compounds      =  zeros(1,NSTATES);
-
         money_spent =  zeros(1,NCOMPOUNDS);
 		money_saved =  zeros(1, NCOMPOUNDS);
 	    psindx      = phase2index_fn(assets.sell_in_phase)-1;
@@ -512,21 +509,29 @@ end
 
             cash_left_to_spend = cash(i); 
             for ctr = 1:NCOMPOUNDS
-               if STARTING_PERIOD < i-1
+               if STARTING_PERIOD < i-1 & acquired(ctr)
                    cash_left_to_spend = cash_left_to_spend - FutureCostEst(ctr);
                end
             end
+            
+            % number of compounds we actually buy per phase LAST PERIOD
+    	    num_compounds      =  zeros(1,NSTATES);
+
             for ctr = 1:NCOMPOUNDS
-                if STARTING_PERIOD==i-1
+                if STARTING_PERIOD(ctr)==i-1
                     if (cash_left_to_spend 	>= (price_tmp(ctr) + FutureCostEst(ctr)))
                         money_spent(ctr)     =  price_tmp(ctr);
                         money_saved(ctr)     =  FutureCostEst(ctr);
                         cash_left_to_spend   =  cash_left_to_spend - price_tmp(ctr) - FutureCostEst(ctr);
                         cash(i)              = cash(i) - price_tmp(ctr);
                         num_compounds(cindxs(ctr)) =  num_compounds(cindxs(ctr)) + 1;
-                    else 
-                        compounds{ctr} = 'DSC';
-                    end
+						invested(ctr)    = true;
+                        acquired(ctr)    = true;
+						compounds_funded(s,i-1) = compounds_funded(s,i-1)+1;
+                        compounds_bought(s,i-1,:) = num_compounds;				
+					else 
+						compounds{ctr} = 'DSC';
+					end
                 end
             end
             
@@ -598,7 +603,7 @@ end
 				end
 				
 				%------------ next if IC is OK fund next phases of research for compounds 
-				compounds_to_fund(s,i) = sum( ~strcmp(compounds,'DSC') & ~strcmp(compounds,'APP') & ~strcmp(compounds,'SLD') & ~invested);
+				compounds_to_fund(s,i) = sum( ~strcmp(compounds,'DSC') & ~strcmp(compounds,'APP') & ~strcmp(compounds,'SLD') & acquired & ~invested);
 
 				if(OK_to_fund)
 					if(i<NPERS)
@@ -619,7 +624,7 @@ end
                         
 						if(cash_to_invest>0)
                             compound_nos           = 1:NCOMPOUNDS;
-							compounds_to_fund_idx  = compound_nos(~strcmp(compounds,'DSC') & ~strcmp(compounds,'APP') & ~strcmp(compounds,'SLD') & ~invested); %index of compounds that need funding
+							compounds_to_fund_idx  = compound_nos(~strcmp(compounds,'DSC') & ~strcmp(compounds,'APP') & ~strcmp(compounds,'SLD') & acquired & ~invested); %index of compounds that need funding
 							cash_spent             = 0;
 							for(k = compounds_to_fund_idx)
 								if(invest_cost(k) <= cash_to_invest) 
@@ -679,8 +684,7 @@ end
                 guarantee_begin_per(s,i+1) = guarantee(i+1);
             end
             
-            invested(STARTING_PERIOD==i) = true;
-				
+            
 		end %for i = 2 : NPERS	%%END TIMESTEP ITERATION%%%%%
 
 		final_compounds = final_compounds + [ sum(strcmp(compounds,'DSC')) sum(strcmp(compounds,'PRE')) sum(strcmp(compounds,'P1')) sum(strcmp(compounds,'P2')) sum(strcmp(compounds,'P3')) sum(strcmp(compounds,'NDA')) sum(strcmp(compounds,'APP'))]./NSIMUS;
@@ -705,7 +709,6 @@ end
 			cash_begin_per(s,i+1) = cash(i+1);
         end
 		cash_realized(s,:)    = cash;
-		compounds_bought(s,:) = num_compounds;
         compounds_spent(s)  = sum(money_spent);
 		A1_paid(s,:)   = principal_paid(1,:)+interest_paid(1,:);
 		A2_paid(s,:)   = principal_paid(2,:)+interest_paid(2,:);
@@ -752,9 +755,9 @@ end
     results.compounds_funded               = compounds_funded;
     results.compounds_funded_row           = compounds_funded_row;
     results.compounds_funded_col           = compounds_funded_col;
-    results.compounds_initially_bought     = compounds_bought;
-    results.compounds_initially_bought_row = compounds_bought_row;
-    results.compounds_initially_bought_col = compounds_bought_col;
+    results.compounds_bought     = compounds_bought;
+    results.compounds_bought_row = compounds_bought_row;
+    results.compounds_bought_col = compounds_bought_col;
     results.compounds_spent     = compounds_spent;
     results.params            = params;
     results.final_sale_values = sell_value;
