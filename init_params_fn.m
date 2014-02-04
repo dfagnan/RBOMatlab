@@ -29,8 +29,8 @@ function params = init_params_fn()
 	%%the Orphan drug paper published in Drug Discovery Today.
 	steady = [.69, .84, .53, .74, .96];
 	
-	%Target phase (eg. 5 = P3, 4 = P2), used for calculating budgeting rules.
-   	target = 5;
+	%Target phase (eg. 4 = P3, 3 = P2), used for calculating budgeting rules.
+   	target = 4;
 	
 	%Orphan drug utility functions build the capped log-normal distributions
 	%Uses values for the standard deviations derived from previous work by Fernandez et al. 2012.
