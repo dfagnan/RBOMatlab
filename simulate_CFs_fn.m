@@ -324,7 +324,6 @@ end
             tmpcell = repmat(phase, 1, simu.initial_compounds(t,ctr));
             STARTING_STATES = {STARTING_STATES{:} tmpcell{:} };
             STARTING_PERIOD = [STARTING_PERIOD repmat(t,1,length(tmpcell))];             
-            
         end
     end
     
