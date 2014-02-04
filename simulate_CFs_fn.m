@@ -501,11 +501,14 @@ end
 		z = randn(1);
         
 		for (i = 2:NPERS) % during life of bonds
-%if i==4, keyboard; end           
+
             cindxs     	=  phase2index_fn(compounds);
-            cindxs(cindxs<=0) = 1; 
-            FutureCostEst  = (psindx>=1).*(assets.pricing_params(cindxs,assets.pricing_params_col.FutureCostEst)');            
-        %(psindx>=1).*(assets.pricing_params(cindxs,assets.pricing_params_col.FutureCostEst)' - assets.pricing_params(psindx,assets.pricing_params_col.FutureCostEst));                        
+			%%OLD PARAMETER FILES NEED THIS
+            %%%FutureCostEst  = (psindx>=1).*(assets.pricing_params(cindxs,assets.pricing_params_col.FutureCostEst)' - assets.pricing_params(psindx,assets.pricing_params_col.FutureCostEst));                        
+        
+			%% NEW PARAMETER FILES NEED THIS
+			FutureCostEst = (cindxs>=1).*(assets.pricing_params(cindxs,assets.pricing_params_col.FutureCostEst)');                        
+
             cash_left_to_spend = cash(i); 
             for ctr = 1:NCOMPOUNDS
                if STARTING_PERIOD < i-1
