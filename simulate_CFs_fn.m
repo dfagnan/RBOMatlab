@@ -321,11 +321,12 @@ end
 	for t=1:size(simu.initial_compounds,1)
         for ctr = 1:NSTATES
             phase   =  ALL_POSSIBLE_STATES(ctr);
-            tmpcell = repmat(phase, 1, simu.initial_compounds(1,ctr));
+            tmpcell = repmat(phase, 1, simu.initial_compounds(t,ctr));
             STARTING_STATES = {STARTING_STATES{:} tmpcell{:} };
             STARTING_PERIOD = [STARTING_PERIOD repmat(t,1,length(tmpcell))];             
+            
         end
-	end
+    end
     
 	temp_bond_value = bonds.nominal;
 	for cctr = 1:NPERS
@@ -540,7 +541,7 @@ end
     
             % ----------- first determine current state of portfolio
             old_phase = compounds;
-                
+            
             elig_idxs = invested & ~(strcmp('DSC',compounds) | strcmp('SLD',compounds) | strcmp('APP',compounds));
             compounds = check_for_transitions_ffn(compounds, invested, rho, params);
             sell_idxs = elig_idxs & (strcmp(assets.sell_in_phase,compounds) | strcmp('APP',compounds)); 
