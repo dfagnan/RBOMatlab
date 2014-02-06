@@ -393,6 +393,7 @@ end
     
 	extra_cash_from_coverage	= zeros(NSIMUS,HORIZON) ;
 	cash_for_investment         = zeros(NSIMUS,NPERS);
+    cash_for_buying             = zeros(NSIMUS,NPERS);
 	interest_paid	            = zeros(length(bonds.nominal), NPERS);
 	principal_paid              = zeros(length(bonds.nominal), NPERS);
 	history_service		        = zeros(NSIMUS,1);
@@ -463,6 +464,29 @@ end
         % If we have enough cash, buy it and update our initial cash
         %1/10*
         FutureCostEst  = (psindx>=1).*(assets.pricing_params(cindxs,assets.pricing_params_col.FutureCostEst)' - assets.pricing_params(psindx,assets.pricing_params_col.FutureCostEst));
+            
+        cash_left_to_spend = cash(1)-bonds.IC_pers*(bonds.nominal(1)*bonds.coupon(1)+bonds.nominal(2)*bonds.coupon(2)); 
+          
+        % number of compounds we actually buy per phase LAST PERIOD
+    	num_compounds      =  zeros(1,NSTATES);
+        for ctr = 1:NCOMPOUNDS
+            if STARTING_PERIOD(ctr)==1
+                if (cash_left_to_spend 	>= (price_tmp(ctr) + FutureCostEst(ctr)))
+                    money_spent(ctr)     =  price_tmp(ctr);
+                    money_saved(ctr)     =  FutureCostEst(ctr);
+                    cash_left_to_spend   =  cash_left_to_spend - price_tmp(ctr) - FutureCostEst(ctr);
+                    cash(1)              = cash(1) - price_tmp(ctr);
+                    num_compounds(cindxs(ctr)) =  num_compounds(cindxs(ctr)) + 1;
+                	invested(ctr)    = true;
+                    acquired(ctr)    = true;
+                    compounds_funded(s,1) = compounds_funded(s,1)+1;
+                else 
+                    compounds{ctr} = 'DSC';
+                end
+            end
+        end
+        compounds_bought(s,1,:) = num_compounds;				
+            
         
 		cash(2)             = cash(1);
 		cash_begin_per(s,2) = cash(1);
@@ -499,42 +523,6 @@ end
         
 		for (i = 2:NPERS) % during life of bonds
 
-            cindxs     			=  phase2index_fn(compounds);
-			cindxs(cindxs<=0) 	=  1;
-			%%OLD PARAMETER FILES NEED THIS
-            %%%FutureCostEst  = (psindx>=1).*(assets.pricing_params(cindxs,assets.pricing_params_col.FutureCostEst)' - assets.pricing_params(psindx,assets.pricing_params_col.FutureCostEst));                        
-        
-			%% NEW PARAMETER FILES NEED THIS
-			FutureCostEst = (cindxs>=1).*(assets.pricing_params(cindxs,assets.pricing_params_col.FutureCostEst)');                        
-
-            cash_left_to_spend = cash(i); 
-            for ctr = 1:NCOMPOUNDS
-               if STARTING_PERIOD < i-1 & acquired(ctr)
-                   cash_left_to_spend = cash_left_to_spend - FutureCostEst(ctr);
-               end
-            end
-            
-            % number of compounds we actually buy per phase LAST PERIOD
-    	    num_compounds      =  zeros(1,NSTATES);
-
-            for ctr = 1:NCOMPOUNDS
-                if STARTING_PERIOD(ctr)==i-1
-                    if (cash_left_to_spend 	>= (price_tmp(ctr) + FutureCostEst(ctr)))
-                        money_spent(ctr)     =  price_tmp(ctr);
-                        money_saved(ctr)     =  FutureCostEst(ctr);
-                        cash_left_to_spend   =  cash_left_to_spend - price_tmp(ctr) - FutureCostEst(ctr);
-                        cash(i)              = cash(i) - price_tmp(ctr);
-                        num_compounds(cindxs(ctr)) =  num_compounds(cindxs(ctr)) + 1;
-						invested(ctr)    = true;
-                        acquired(ctr)    = true;
-						compounds_funded(s,i-1) = compounds_funded(s,i-1)+1;
-                        compounds_bought(s,i-1,:) = num_compounds;				
-					else 
-						compounds{ctr} = 'DSC';
-					end
-                end
-            end
-            
             current_cash  = cash(i);
 			current_guarantee  = guarantee(i);
     
@@ -626,16 +614,53 @@ end
                             compound_nos           = 1:NCOMPOUNDS;
 							compounds_to_fund_idx  = compound_nos(~strcmp(compounds,'DSC') & ~strcmp(compounds,'APP') & ~strcmp(compounds,'SLD') & acquired & ~invested); %index of compounds that need funding
 							cash_spent             = 0;
-							for(k = compounds_to_fund_idx)
+							for k = compounds_to_fund_idx
 								if(invest_cost(k) <= cash_to_invest) 
 									invested(k)    = true;
 									cash_to_invest = cash_to_invest-invest_cost(k);
 									cash_spent     = cash_spent+invest_cost(k);
 									compounds_funded(s,i) = compounds_funded(s,i)+1;
 								end
-							end
-							current_cash = current_cash-cash_spent ;
-							cash_for_investment(s,i) = cash_for_investment(s,i) + cash_spent;
+                            end
+                            
+                            cash_for_investment(s,i) = cash_for_investment(s,i) + cash_spent;
+                            current_cash = current_cash-cash_spent ;
+                            cash_spent = 0;
+                            cindxs     			=  phase2index_fn(compounds);
+                            cindxs(cindxs<=0) 	=  1;
+                            %%OLD PARAMETER FILES NEED THIS
+                            %%%FutureCostEst  = (psindx>=1).*(assets.pricing_params(cindxs,assets.pricing_params_col.FutureCostEst)' - assets.pricing_params(psindx,assets.pricing_params_col.FutureCostEst));                        
+
+                            %% NEW PARAMETER FILES NEED THIS
+                            FutureCostEst = (cindxs>=1).*(assets.pricing_params(cindxs,assets.pricing_params_col.FutureCostEst)');                        
+                            for ctr = 1:NCOMPOUNDS
+                               if STARTING_PERIOD < i & acquired(ctr)
+                                   cash_to_invest = cash_to_invest - FutureCostEst(ctr);
+                               end
+                            end
+                            
+                            % number of compounds we actually buy per phase LAST PERIOD
+                            num_compounds      =  zeros(1,NSTATES);
+                            
+                            for k = 1:NCOMPOUNDS
+                                if STARTING_PERIOD(k)==i
+                                    if (cash_to_invest 	>= (price_tmp(k) + FutureCostEst(k)))
+                                        cash_to_invest   =  cash_to_invest - price_tmp(k) - FutureCostEst(k);
+                                        cash_spent         = cash_spent + price_tmp(k);
+                                        num_compounds(cindxs(k)) =  num_compounds(cindxs(k)) + 1;
+                                        invested(k)    = true;
+                                        acquired(k)    = true;
+                                    else 
+                                        compounds{k} = 'DSC';
+                                    end
+                                end
+                            end
+                            compounds_bought(s,i,:) = num_compounds;				
+                            cash_for_buying(s,i) = cash_for_buying(s,i) + cash_spent;    
+
+                            current_cash = current_cash-cash_spent ;
+							
+							
 						end
                     end %if(i<NPERS)
                 end %if(OK_to_fund)
@@ -728,6 +753,7 @@ end
     results.cash_begin_per      = cash_begin_per;
     results.cash                = cash_realized;
     results.cash_for_investment = cash_for_investment;
+    results.cash_for_buying     = cash_for_buying;
     results.A1_bals           = A1_realized_vals;
     results.A2_bals           = A2_realized_vals;
     results.amort_sched       = AMORT_SCHED;
