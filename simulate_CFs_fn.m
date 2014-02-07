@@ -634,7 +634,7 @@ end
                             %% NEW PARAMETER FILES NEED THIS
                             FutureCostEst = (cindxs>=1).*(assets.pricing_params(cindxs,assets.pricing_params_col.FutureCostEst)');                        
                             for ctr = 1:NCOMPOUNDS
-                               if STARTING_PERIOD < i & acquired(ctr)
+                               if STARTING_PERIOD(ctr) < i & acquired(ctr)
                                    cash_to_invest = cash_to_invest - FutureCostEst(ctr);
                                end
                             end
