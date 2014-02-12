@@ -1,7 +1,7 @@
 clear all;
 addpath '..'
-test_scripts = {@init_params_fn_NBTx_A @init_params_fn_NBTx_B @init_params_fn_DDT};
-expected = [0.091 0.106 0.134];
+test_scripts = {@init_params_fn_NBTx_A @init_params_fn_NBTx_B @init_params_fn_DDT @init_params_fn_DDT_geometric};
+expected = [0.091 0.106 0.134 0.134];
 NSIMUS = 1000;
 for i =1:length(expected)
     chance = 2;
