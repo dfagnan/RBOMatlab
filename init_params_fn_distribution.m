@@ -3,11 +3,12 @@
 %"Financing drug discovery for orphan diseases" Fagnan et al. 2013.
 %@params is of type struct and has 4 fields simu (simulation parameters), 
 %   assets (asset parameters), bonds (bond parameters), and ce (guarantee parameters)
-function params = init_params_fn()
+function params = init_params_fn_distribution()
 
     % ASSET PARAMETERS
     assets = struct;
-	assets.mode = 'Markov';
+	assets.mode = 'General';
+    assets.distribution = 'LogNormal';
 	%Correlation value for asset valuation.
     assets.rho = 0.2;
    
@@ -23,24 +24,24 @@ function params = init_params_fn()
 	%Duration of each phase in years.
 	dur = [1, 1.6561, 2.0942, 2.1497, 0.8];
  
-
- 
-	
-	%Probabilities of technical and regulatory success by phase.
+    %Probabilities of technical and regulatory success by phase.
 	%%Note that the original paper by Fernandez et al. uses a more
 	%%advanced generating matrix approach using data unavailable for
 	%%the Orphan drug paper published in Drug Discovery Today.
 	steady = [.69, .84, .53, .74, .96];
-          
- 
+           
 	
 	%Target phase (eg. 4 = P3, 3 = P2), used for calculating budgeting rules.
    	target = 4;
 	
+    %% Success probabilities for non-markov chain clinical trials.
+    assets.success = steady;
+    assets.dur_mean = dur;
+    
 	%Orphan drug utility functions build the capped log-normal distributions
 	%Uses values for the standard deviations derived from previous work by Fernandez et al. 2012.
-    assets.pricing_params = createTransMat(approvalValue,costs,disc,dur,steady,target);
-	assets.trans_prob=createProbMat(steady,dur);
+	assets.pricing_params = createTransMat(approvalValue,costs,disc,dur,steady,target);
+    assets.trans_prob=createProbMat(steady,dur);
    
    %%Set the named variables to the corresponding column numbers.
    %DSC refers to a state of withdrawal or discontinued.
@@ -138,7 +139,7 @@ function params = init_params_fn()
     simu = struct;
 	%Number of simulations recommend 100K for quick estimates,
 	% or 2 million for a complete profile.
-    simu.NSIMUS = 1000;
+    simu.NSIMUS = 10000;
     simu.TIMESTEPS =  max(reshape(bonds.amort_timing,1,[]))+1;
 	%Total capital to be spread across tranches.
     simu.initial_cash  = 575;

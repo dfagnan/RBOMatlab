@@ -9,7 +9,7 @@ function params = init_params_fn_NBTx_A()
     % ASSET PARAMETERS
     %
     assets = struct;
-
+    assets.mode = 'Markov';
     assets.rho = 0.2;
 	assets.trans_prob = [ ...
 

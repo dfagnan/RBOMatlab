@@ -5,6 +5,34 @@
 %Output:
 %@results is of type struct and provides details of each simulation run
 function results = simulate_CFs_fn(show_progress, params)
+
+
+function next_phase = check_for_transitions_ffn(compounds, invested, rho, params)
+    next_phase = compounds;
+    phase_idxs  = phase2index_fn(compounds);
+    eligible_idx = ~strcmp('DSC',compounds) & ~strcmp('APP',compounds) & ~strcmp('SLD',compounds) & invested;
+    
+    p = rand(size(find(eligible_idx)));
+    
+    elig_phase = determine_current_state_fn(p, params.assets.trans_prob(phase_idxs(eligible_idx),:), params.assets.trans_prob_col);
+    
+    next_phase(eligible_idx)=elig_phase; 
+end
+
+
+function next_phase = check_for_transitions_ffn_distribution(compounds, invested, time_required, success, params)
+    next_phase = compounds;
+    phase_idxs  = phase2index_fn(compounds);
+    eligible_idx = ~strcmp('DSC',compounds) & ~strcmp('APP',compounds) & ~strcmp('SLD',compounds) & invested ...
+    & ((time_in_phase+1)>= time_required(sub2ind(size(time_required),[1:NCOMPOUNDS],max(phase_idxs,1))));
+    
+    success_idx = (rand(size(compounds)))<success(max(phase_idxs,1));
+    phase_idxs(eligible_idx & success_idx) = phase_idxs(eligible_idx & success_idx) + 1;
+    phase_idxs(eligible_idx & ~success_idx) = 1;
+    names = {'DSC','PRE','P1','P2','P3','NDA', 'APP'};
+    next_phase(eligible_idx)=names(phase_idxs(eligible_idx)); 
+end
+
 %Nested Function
 %Changes guarantee_draw,drew_on_guarantee
 function [cur_cash, cur_guarantee] = repay_guarantee_ffn(cur_per,cur_cash,cur_guarantee)
@@ -341,6 +369,11 @@ end
     % ----------------------------------
 
 	rho               	= assets.rho;
+    if strcmp(params.assets.mode,'General')==1
+       success             = [0, assets.success, 0];
+       dur_mean            = assets.dur_mean;
+    end
+    
 	bond_value        	= bonds.nominal;
 
 	invested            = false(1,NCOMPOUNDS);
@@ -431,6 +464,7 @@ end
         %compounds           = compounds(randperm(length(compounds)));
 		time_in_phase 		= zeros(1,NCOMPOUNDS);
         
+        
 		sell_value    		= zeros(1,NCOMPOUNDS);
 		equity_in_compound 	= ones(1,NCOMPOUNDS).*assets.equity_stake;
 
@@ -520,7 +554,31 @@ end
         svc_in_default = false;
         %Valuation for average market component.
 		z = randn(1);
+
+		%%TEMPORARY CODE FOR DURATION DISTRIBUTION
+        if strcmp(params.assets.mode,'General')
+            dur = [0, dur_mean, 0];
+            v = dur/4;
+            mu_dur = log(dur.^2./sqrt(v+dur.^2));
+            sigma_dur = sqrt(log(1+v./dur.^2));
         
+    		time_required = zeros(NCOMPOUNDS,NSTATES);
+		
+    		for i = 2:NSTATES-1
+                if strcmp(assets.distribution,'Constant')
+                    %% Constant Duration.
+                    time_required(:,i) = round(2*dur(i)*ones(1,NCOMPOUNDS));
+                elseif strcmp(assets.distribution,'LogNormal')
+                    %% Log-Normal Duration.
+                    time_required(:,i) = 2*lognrnd(mu_dur(i),sigma_dur(i),1,NCOMPOUNDS);
+                elseif strcmp(assets.distribution,'Geometric')
+                    %% Geometric Duration.
+                    time_required(:,i) = 1+geornd(1-assets.trans_prob(i,i),1,NCOMPOUNDS);
+                else
+                    error('Unknown distribution.');
+                end
+            end
+        end
 		for (i = 2:NPERS) % during life of bonds
 
             current_cash  = cash(i);
@@ -530,7 +588,11 @@ end
             old_phase = compounds;
             
             elig_idxs = invested & ~(strcmp('DSC',compounds) | strcmp('SLD',compounds) | strcmp('APP',compounds));
-            compounds = check_for_transitions_ffn(compounds, invested, rho, params);
+            if strcmp(params.assets.mode,'General')==1
+                compounds = check_for_transitions_ffn_distribution(compounds, invested, time_required, success, params);
+            else
+                compounds = check_for_transitions_ffn(compounds, invested, rho, params);
+            end
             sell_idxs = elig_idxs & (strcmp(assets.sell_in_phase,compounds) | strcmp('APP',compounds)); 
             pr = sell_compound_ffn(sell_idxs,i);
            
@@ -797,23 +859,6 @@ end
 end
 
 %Usage
-function next_phase = check_for_transitions_ffn(compounds, invested, rho, params)
-    next_phase = compounds;
-    phase_idxs  = phase2index_fn(compounds);
-    eligible_idx = ~strcmp('DSC',compounds) & ~strcmp('APP',compounds) & ~strcmp('SLD',compounds) & invested;
-    
-    p = rand(size(find(eligible_idx)));
-    
-%     i = phase_idxs(eligible_idx) +1;
-%     value = cell(size(p));
-%     names = fieldnames( params.assets.trans_prob_col);
-%     for ctr = 1 : length(names)
-%         [value{ params.assets.trans_prob_col.(names{ctr})==i}] = deal(names{ctr});
-%     end
-    elig_phase = determine_current_state_fn(p, params.assets.trans_prob(phase_idxs(eligible_idx),:), params.assets.trans_prob_col);
-    
-    next_phase(eligible_idx)=elig_phase; 
-end
 
 
 %COPYRIGHT 2012,2013

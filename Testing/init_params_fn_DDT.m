@@ -7,7 +7,7 @@ function params = init_params_fn_DDT()
 
     % ASSET PARAMETERS
     assets = struct;
-	
+	assets.mode = 'Markov';
 	%Correlation value for asset valuation.
     assets.rho = 0.2;
    
