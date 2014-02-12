@@ -23,6 +23,7 @@ for i =1:length(expected)
         sprintf('Test gap: %f',abs(ROE_mean_a - expected(i))/(ROE_std_a/sqrt(params.simu.NSIMUS)))
         if abs(ROE_mean_a - expected(i))/(ROE_std_a/sqrt(params.simu.NSIMUS))>1.645
             chance = chance - 1;
+            keyboard
             assert(chance > 0, 'Test Failed!');
         else
             chance = 0;

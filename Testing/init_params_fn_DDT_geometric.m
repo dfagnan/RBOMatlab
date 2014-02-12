@@ -29,14 +29,15 @@ function params = init_params_fn_DDT_geometric()
 	%%advanced generating matrix approach using data unavailable for
 	%%the Orphan drug paper published in Drug Discovery Today.
 	steady = [.69, .84, .53, .74, .96];
-	
+	assets.success = steady;
+    assets.dur_mean = dur;
 	%Target phase (eg. 4 = P3, 3 = P2), used for calculating budgeting rules.
    	target = 4;
 	
 	%Orphan drug utility functions build the capped log-normal distributions
 	%Uses values for the standard deviations derived from previous work by Fernandez et al. 2012.
     assets.pricing_params = createTransMat(approvalValue,costs,disc,dur,steady,target);
-	assets.trans_prob=createProbMat(steady,dur);
+	%%assets.trans_prob=createProbMat(steady,dur);
    
    %%Set the named variables to the corresponding column numbers.
    %DSC refers to a state of withdrawal or discontinued.

@@ -573,7 +573,7 @@ end
                     time_required(:,i) = 2*lognrnd(mu_dur(i),sigma_dur(i),1,NCOMPOUNDS);
                 elseif strcmp(assets.distribution,'Geometric')
                     %% Geometric Duration.
-                    time_required(:,i) = 1+geornd(1-assets.trans_prob(i,i),1,NCOMPOUNDS);
+                    time_required(:,i) = 1+geornd(1/(2*dur(i)),1,NCOMPOUNDS);
                 else
                     error('Unknown distribution.');
                 end
