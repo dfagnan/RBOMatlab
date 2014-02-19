@@ -17,9 +17,10 @@ function mat=createTransMat(appValue,costs,disc,dur,steady,target)
 		milestone  = [1, 3.75, 10, 37.6,0,0]';
 	%	milestone  = zeros(n+1)
 		
-		cmx = [20, 20, 100, 500, 0, 0]';
-
-		vmx = [100, 250, 500, 1000, 2500, 5000]';
+		
+        cmx = [20, 20, 100, 500, 0, 0]'; % ORG cmx = [20, 20, 100, 500, 0, 0]';
+		vmx = [100, 250, 500, 1000, 5000, 5000]'; % ORIG [100, 250, 500, 1000, 2500, 5000]';
+        
 		vmu = zeros(n+1,1);
 		vsigma = zeros(n+1,1);
 		csigma = zeros(n+1,1);

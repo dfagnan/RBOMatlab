@@ -6,31 +6,27 @@
 %@results is of type struct and provides details of each simulation run
 function results = simulate_CFs_fn(show_progress, params)
 
-
-function next_phase = check_for_transitions_ffn(compounds, invested, rho, params)
+%Nested Function
+function next_phase = check_for_transitions_ffn(compounds, invested, time_required, success, params)
     next_phase = compounds;
-    phase_idxs  = phase2index_fn(compounds);
-    eligible_idx = ~strcmp('DSC',compounds) & ~strcmp('APP',compounds) & ~strcmp('SLD',compounds) & invested;
-    
-    p = rand(size(find(eligible_idx)));
-    
-    elig_phase = determine_current_state_fn(p, params.assets.trans_prob(phase_idxs(eligible_idx),:), params.assets.trans_prob_col);
-    
-    next_phase(eligible_idx)=elig_phase; 
-end
-
-
-function next_phase = check_for_transitions_ffn_distribution(compounds, invested, time_required, success, params)
-    next_phase = compounds;
-    phase_idxs  = phase2index_fn(compounds);
-    eligible_idx = ~strcmp('DSC',compounds) & ~strcmp('APP',compounds) & ~strcmp('SLD',compounds) & invested ...
-    & ((time_in_phase+1)>= time_required(sub2ind(size(time_required),[1:NCOMPOUNDS],max(phase_idxs,1))));
-    
-    success_idx = (rand(size(compounds)))<success(max(phase_idxs,1));
-    phase_idxs(eligible_idx & success_idx) = phase_idxs(eligible_idx & success_idx) + 1;
-    phase_idxs(eligible_idx & ~success_idx) = 1;
-    names = {'DSC','PRE','P1','P2','P3','NDA', 'APP'};
-    next_phase(eligible_idx)=names(phase_idxs(eligible_idx)); 
+    for compIndx=1:length(unique(COMPOUND_TYPES))
+        if strcmp(params.assets(compIndx).mode,'General')==1
+            phase_idxs  = phase2index_fn(compounds);
+            eligible_idx = ~strcmp('DSC',compounds) & ~strcmp('APP',compounds) & ~strcmp('SLD',compounds) & invested ...
+                & ((time_in_phase+1)>= time_required(sub2ind(size(time_required),[1:NCOMPOUNDS],max(phase_idxs,1))));
+            success_idx = (rand(size(compounds)))<success(compIndx,max(phase_idxs,1));
+            phase_idxs(eligible_idx & success_idx) = phase_idxs(eligible_idx & success_idx) + 1;
+            phase_idxs(eligible_idx & ~success_idx) = 1;
+            names = {'DSC','PRE','P1','P2','P3','NDA', 'APP'};
+            next_phase(eligible_idx & COMPOUND_TYPES==compIndx)=names(phase_idxs(eligible_idx & COMPOUND_TYPES==compIndx));
+        else
+            phase_idxs  = phase2index_fn(compounds);
+            eligible_idx = ~strcmp('DSC',compounds) & ~strcmp('APP',compounds) & ~strcmp('SLD',compounds) & invested;
+            p = rand(size(find(eligible_idx)));
+            elig_phase = determine_current_state_fn(p, params.assets(compIndx).trans_prob(phase_idxs(eligible_idx),:), params.assets(compIndx).trans_prob_col);
+            next_phase(eligible_idx & COMPOUND_TYPES==compIndx)=elig_phase;
+        end
+    end
 end
 
 %Nested Function
@@ -186,7 +182,13 @@ end
 %Changes compounds,cash,sales,sale_times, sell_value or extra_cash_from_coverage,time_in_phase
 function update_sale(price,remaining_indxs,cur_per,forCoverage)
     phase_idxs = phase2index_fn(compounds(remaining_indxs));
-    sale_per  = min(cur_per+ceil(params.assets.sale_time(phase_idxs)), HORIZON);
+    
+    comp_type = COMPOUND_TYPES(remaining_indxs);
+    sale_per = nan(size(comp_type))';
+    for compIndx=unique(comp_type)
+        sale_per(comp_type==compIndx) = min(cur_per+ceil(params.assets(compIndx).sale_time(phase_idxs(comp_type==compIndx))), HORIZON);
+    end
+
     if(~forCoverage)
         sell_value(remaining_indxs) = price;
     end
@@ -215,12 +217,16 @@ function liquidate_portfolio_ffn(cur_per)
         return
     end
 
-    phase_idxs = phase2index_fn( compounds(remaining_indxs));
-    mx       = params.assets.pricing_params(phase_idxs, params.assets.pricing_params_col.('vmx'));
-    mu       = params.assets.pricing_params(phase_idxs, params.assets.pricing_params_col.('vmu'));
-    sigma    = params.assets.pricing_params(phase_idxs, params.assets.pricing_params_col.('vsigma'));
-    price    = compound_sale_price_fn(mu, sigma, mx, rho, z).*equity_in_compound(remaining_indxs);
-    
+    comp_type = COMPOUND_TYPES(remaining_indxs);
+    price = nan(size(comp_type));
+    for compIndx=unique(comp_type)
+        phase_idxs = phase2index_fn(compounds(remaining_indxs & COMPOUND_TYPES==compIndx));
+        mx       = params.assets(compIndx).pricing_params(phase_idxs, params.assets(compIndx).pricing_params_col.('vmx'));
+        mu       = params.assets(compIndx).pricing_params(phase_idxs, params.assets(compIndx).pricing_params_col.('vmu'));
+        sigma    = params.assets(compIndx).pricing_params(phase_idxs, params.assets(compIndx).pricing_params_col.('vsigma'));
+        price(comp_type==compIndx) = compound_sale_price_fn(mu, sigma, mx, rho(compIndx), z).*equity_in_compound(remaining_indxs & COMPOUND_TYPES==compIndx);
+    end
+
     % here is where we adjust for uninvested compounds
     rem_inv_cost = invest_cost(remaining_indxs);
     rem_not_invested = ~invested(remaining_indxs);
@@ -228,7 +234,9 @@ function liquidate_portfolio_ffn(cur_per)
     
     %adjust for compounds that have not transitioned at all until liquidation
     rem_not_transitioned = time_in_phase(remaining_indxs)==cur_per-1;
-    price(rem_not_transitioned) = price(rem_not_transitioned)*params.assets.ratio_unchanged;
+    for compIndx=unique(comp_type)
+        price(rem_not_transitioned & comp_type==compIndx) = price(rem_not_transitioned & comp_type==compIndx)*params.assets(compIndx).ratio_unchanged;
+    end
 
     % update bookkeeping AND cash AND compounds.
     update_sale(price,remaining_indxs,cur_per,false)
@@ -242,13 +250,17 @@ function sell_compounds_to_cover_shortfall_ffn(shortfall,cur_per)
     if(~any(remaining_comp_idx))
         return
     end
-    
-    phase_idxs 	= phase2index_fn(compounds(remaining_comp_idx));
-    mx       	= params.assets.pricing_params(phase_idxs, params.assets.pricing_params_col.('vmx'));
-    mu       	= params.assets.pricing_params(phase_idxs, params.assets.pricing_params_col.('vmu'));
-    sigma   	= params.assets.pricing_params(phase_idxs, params.assets.pricing_params_col.('vsigma'));
-    prices   	= compound_sale_price_fn(mu, sigma, mx, rho, z).*equity_in_compound(remaining_comp_idx);
 
+    comp_type = COMPOUND_TYPES(remaining_comp_idx); 
+    prices = nan(size(comp_type));
+    for compIndx=unique(comp_type)
+        phase_idxs 	= phase2index_fn(compounds(remaining_comp_idx & COMPOUND_TYPES==compIndx));    
+        mx       	= params.assets(compIndx).pricing_params(phase_idxs, params.assets(compIndx).pricing_params_col.('vmx'));
+        mu       	= params.assets(compIndx).pricing_params(phase_idxs, params.assets(compIndx).pricing_params_col.('vmu'));
+        sigma   	= params.assets(compIndx).pricing_params(phase_idxs, params.assets(compIndx).pricing_params_col.('vsigma'));
+        prices(comp_type==compIndx) = compound_sale_price_fn(mu, sigma, mx, rho(compIndx), z).*equity_in_compound(remaining_comp_idx & COMPOUND_TYPES==compIndx);
+    end
+    
     % here is where we adjust for uninvested compounds
     rem_inv_cost 			= invest_cost(remaining_comp_idx);
     rem_not_invested		= ~invested(remaining_comp_idx);   
@@ -279,11 +291,15 @@ function prices = sell_compound_ffn(comp_idx, cur_per)
         return
     end
 
-    phase_idxs  = phase2index_fn( compounds(remaining_comp_idx));
-    mx       	= params.assets.pricing_params(phase_idxs, params.assets.pricing_params_col.('vmx'));
-    mu       	= params.assets.pricing_params(phase_idxs, params.assets.pricing_params_col.('vmu'));
-    sigma    	= params.assets.pricing_params(phase_idxs, params.assets.pricing_params_col.('vsigma'));
-    prices    	= compound_sale_price_fn(mu, sigma, mx, rho, z).*equity_in_compound(remaining_comp_idx);
+    comp_type = COMPOUND_TYPES(remaining_comp_idx);
+    prices = nan(size(comp_type));
+    for compIndx=unique(comp_type)
+        phase_idxs  = phase2index_fn( compounds(remaining_comp_idx & COMPOUND_TYPES==compIndx));    
+        mx       	= params.assets(compIndx).pricing_params(phase_idxs, params.assets(compIndx).pricing_params_col.('vmx'));
+        mu       	= params.assets(compIndx).pricing_params(phase_idxs, params.assets(compIndx).pricing_params_col.('vmu'));
+        sigma    	= params.assets(compIndx).pricing_params(phase_idxs, params.assets(compIndx).pricing_params_col.('vsigma'));
+        prices(comp_type==compIndx) = compound_sale_price_fn(mu, sigma, mx, rho(compIndx), z).*equity_in_compound(remaining_comp_idx & COMPOUND_TYPES==compIndx);
+    end
     
     % here is where we adjust for uninvested compounds
     rem_inv_cost 	 = invest_cost(remaining_comp_idx);
@@ -312,9 +328,15 @@ function transition_compound_ffn(idx)
     ndaidx 					= strcmp('NDA',compounds);
     invested(ndaidx & idx)  = true;	
     invested(~ndaidx & idx) = false;
-    cindx             		= phase2index_fn(compounds(~ndaidx & idx));
-    invest_cost(~ndaidx & idx)   = trial_cost_fn(compounds(~ndaidx & idx), params) + params.assets.pricing_params(cindx,params.assets.pricing_params_col.('Milestone'))';
-    time_in_phase(idx) 		= 0;
+       
+    trial_cost = trial_cost_fn(compounds, params, COMPOUND_TYPES);
+    
+    for compIndx=1:length(unique(COMPOUND_TYPES))
+        cindx = phase2index_fn(compounds(~ndaidx & idx & COMPOUND_TYPES==compIndx));
+        invest_cost(~ndaidx & idx & COMPOUND_TYPES==compIndx) = trial_cost(~ndaidx & idx & COMPOUND_TYPES==compIndx) + ...
+            params.assets(compIndx).pricing_params(cindx,params.assets(compIndx).pricing_params_col.('Milestone'))';
+    end
+    time_in_phase(idx) = 0;
 end
 
     tStart = tic;
@@ -337,21 +359,26 @@ end
 	ce                    = params.ce;
    	NSIMUS                = simu.NSIMUS;
    	NPERS                 = simu.TIMESTEPS;
-   	HORIZON               = NPERS+ceil(max(assets.sale_time));
+   	HORIZON               = NPERS+ceil(max(unique([assets.sale_time])));
    	NCOMPOUNDS            = sum(simu.initial_compounds(:)) ;
-	ALL_POSSIBLE_STATES   = fieldnames(assets.trans_prob_col); %c("DSC","PRE","P1","P2","P3","NDA","APP")
+	ALL_POSSIBLE_STATES   = fieldnames(assets(1).trans_prob_col); %c("DSC","PRE","P1","P2","P3","NDA","APP")
 	NSTATES               = size(simu.initial_compounds,2); %length(simu.initial_compounds); 
 	NBONDS                = length(bonds.capital_structure)-1;
 	STARTING_STATES       = {}; %repmat({'DSC'},1, simu.initial_compounds(1,1)) ;
 	AMORT_SCHED           = zeros(NBONDS,NPERS);
+    NCOMPOUNDTYPES = length(params.assets);
 
-    STARTING_PERIOD = []; 
-	for t=1:size(simu.initial_compounds,1)
-        for ctr = 1:NSTATES
-            phase   =  ALL_POSSIBLE_STATES(ctr);
-            tmpcell = repmat(phase, 1, simu.initial_compounds(t,ctr));
-            STARTING_STATES = {STARTING_STATES{:} tmpcell{:} };
-            STARTING_PERIOD = [STARTING_PERIOD repmat(t,1,length(tmpcell))];             
+    STARTING_PERIOD = [];
+    COMPOUND_TYPES = [];
+    for t=1:size(simu.initial_compounds,1)
+        for ctr=1:NSTATES
+            for i=1:NCOMPOUNDTYPES
+                phase   =  ALL_POSSIBLE_STATES(ctr);
+                tmpcell = repmat(phase, 1, sum(simu.initial_compounds(t,ctr,i)));
+                STARTING_STATES = {STARTING_STATES{:} tmpcell{:} };
+                STARTING_PERIOD = [STARTING_PERIOD repmat(t,1,length(tmpcell))];
+                COMPOUND_TYPES = [COMPOUND_TYPES repmat(i,1,length(tmpcell))];
+            end
         end
     end
     
@@ -368,10 +395,15 @@ end
     
     % ----------------------------------
 
-	rho               	= assets.rho;
-    if strcmp(params.assets.mode,'General')==1
-       success             = [0, assets.success, 0];
-       dur_mean            = assets.dur_mean;
+	rho = [assets.rho];
+    for i=1:NCOMPOUNDTYPES
+        if strcmp(params.assets(i).mode,'General')==1
+            success(i,:) = [0, assets(i).success, 0];
+            dur_mean(i,:) = assets(i).dur_mean;
+        else
+            success(i,:) = [NaN,NaN,NaN]; 
+            dur_mean(i,:) = [NaN,NaN,NaN,NaN,NaN];
+        end
     end
     
 	bond_value        	= bonds.nominal;
@@ -379,7 +411,7 @@ end
 	invested            = false(1,NCOMPOUNDS);
     acquired            = false(1,NCOMPOUNDS);
 	sell_value          = zeros(1,NCOMPOUNDS);
-	equity_in_compound  = ones(1,NCOMPOUNDS).*assets.equity_stake;
+	equity_in_compound  = [assets(COMPOUND_TYPES).equity_stake]; 
 	compounds           = STARTING_STATES;
 	time_in_phase       = zeros(1,NCOMPOUNDS);
 	
@@ -466,7 +498,7 @@ end
         
         
 		sell_value    		= zeros(1,NCOMPOUNDS);
-		equity_in_compound 	= ones(1,NCOMPOUNDS).*assets.equity_stake;
+		equity_in_compound 	= [assets(COMPOUND_TYPES).equity_stake]; 
 
 		% state of securities
 		cash			  	= zeros(1,HORIZON);
@@ -487,22 +519,32 @@ end
         guarantee_begin_per(s,1) = guarantee(1);
         unpaid_svc  = 0;
         in_default  = false;
-        invest_cost = trial_cost_fn(compounds,params);
+        invest_cost = trial_cost_fn(compounds,params,COMPOUND_TYPES);
         
 		% temporary variables to make sure we spend only our target percentage
         money_spent =  zeros(1,NCOMPOUNDS);
 		money_saved =  zeros(1, NCOMPOUNDS);
-	    psindx      = phase2index_fn(assets.sell_in_phase)-1;
+	    psindx      = phase2index_fn([assets.sell_in_phase])-1;
         cindxs     	=  phase2index_fn(compounds);
-	    price_tmp 	=  invest_cost + assets.pricing_params(cindxs,assets.pricing_params_col.UpFront)';
+        
+        for i=1:length(unique(COMPOUND_TYPES)) 
+            tmpFlag = COMPOUND_TYPES==i;
+
+            % upfront cost
+            tmp = assets(i).pricing_params(cindxs,assets(i).pricing_params_col.UpFront)';
+            price_tmp(tmpFlag) = invest_cost(tmpFlag) + tmp(tmpFlag); 
+
+            % future cost
+            tmp = (psindx(i)>=1).*(assets(i).pricing_params(cindxs,assets(i).pricing_params_col.FutureCostEst)' - ...
+                assets(i).pricing_params(psindx(i),assets(i).pricing_params_col.FutureCostEst));            
+            FutureCostEst(tmpFlag) = tmp(tmpFlag);
+        end
+        	    
         % If we have enough cash, buy it and update our initial cash
-        %1/10*
-        FutureCostEst  = (psindx>=1).*(assets.pricing_params(cindxs,assets.pricing_params_col.FutureCostEst)' - assets.pricing_params(psindx,assets.pricing_params_col.FutureCostEst));
-            
         cash_left_to_spend = cash(1)-bonds.IC_pers*(bonds.nominal(1)*bonds.coupon(1)+bonds.nominal(2)*bonds.coupon(2)); 
           
         % number of compounds we actually buy per phase LAST PERIOD
-    	num_compounds      =  zeros(1,NSTATES);
+    	num_compounds =  zeros(1,NSTATES);
         for ctr = 1:NCOMPOUNDS
             if STARTING_PERIOD(ctr)==1
                 if (cash_left_to_spend 	>= (price_tmp(ctr) + FutureCostEst(ctr)))
@@ -556,29 +598,32 @@ end
 		z = randn(1);
 
 		%%TEMPORARY CODE FOR DURATION DISTRIBUTION
-        if strcmp(params.assets.mode,'General')
-            dur = [0, dur_mean, 0];
-            v = dur/4;
-            mu_dur = log(dur.^2./sqrt(v+dur.^2));
-            sigma_dur = sqrt(log(1+v./dur.^2));
-        
-    		time_required = zeros(NCOMPOUNDS,NSTATES);
-		
-    		for i = 2:NSTATES-1
-                if strcmp(assets.distribution,'Constant')
-                    %% Constant Duration.
-                    time_required(:,i) = round(2*dur(i)*ones(1,NCOMPOUNDS));
-                elseif strcmp(assets.distribution,'LogNormal')
-                    %% Log-Normal Duration.
-                    time_required(:,i) = 2*lognrnd(mu_dur(i),sigma_dur(i),1,NCOMPOUNDS);
-                elseif strcmp(assets.distribution,'Geometric')
-                    %% Geometric Duration.
-                    time_required(:,i) = 1+geornd(1/(2*dur(i)),1,NCOMPOUNDS);
-                else
-                    error('Unknown distribution.');
+        time_required = zeros(NCOMPOUNDS,NSTATES);
+        for j=unique(COMPOUND_TYPES)
+            if strcmp(params.assets(j).mode,'General')
+                dur = [0, dur_mean(j,:), 0];
+                v = dur/4;
+                mu_dur = log(dur.^2./sqrt(v+dur.^2));
+                sigma_dur = sqrt(log(1+v./dur.^2));
+                        
+                tmpFlag = COMPOUND_TYPES==j;
+                for i = 2:NSTATES-1
+                    if strcmp(assets(j).distribution,'Constant')
+                        % Constant Duration.
+                        time_required(tmpFlag,i) = round(2*dur(i)*ones(1,sum(tmpFlag)));
+                    elseif strcmp(assets(j).distribution,'LogNormal')
+                        % Log-Normal Duration.
+                        time_required(tmpFlag,i) = 2*lognrnd(mu_dur(i),sigma_dur(i),1,sum(tmpFlag));
+                    elseif strcmp(assets(j).distribution,'Geometric')
+                        % Geometric Duration.
+                        time_required(tmpFlag,i) = 1+geornd(1/(2*dur(i)),1,sum(tmpFlag));
+                    else
+                        error('Unknown distribution.');
+                    end
                 end
             end
         end
+        
 		for (i = 2:NPERS) % during life of bonds
 
             current_cash  = cash(i);
@@ -588,12 +633,11 @@ end
             old_phase = compounds;
             
             elig_idxs = invested & ~(strcmp('DSC',compounds) | strcmp('SLD',compounds) | strcmp('APP',compounds));
-            if strcmp(params.assets.mode,'General')==1
-                compounds = check_for_transitions_ffn_distribution(compounds, invested, time_required, success, params);
-            else
-                compounds = check_for_transitions_ffn(compounds, invested, rho, params);
-            end
-            sell_idxs = elig_idxs & (strcmp(assets.sell_in_phase,compounds) | strcmp('APP',compounds)); 
+
+            compounds = check_for_transitions_ffn(compounds, invested, time_required, success, params);            
+            
+            sell_idxs = elig_idxs & (strcmp([assets(COMPOUND_TYPES).sell_in_phase],compounds) | strcmp('APP',compounds));
+
             pr = sell_compound_ffn(sell_idxs,i);
            
     	    dsc_idxs = elig_idxs & strcmp('DSC',compounds);
@@ -694,7 +738,12 @@ end
                             %%%FutureCostEst  = (psindx>=1).*(assets.pricing_params(cindxs,assets.pricing_params_col.FutureCostEst)' - assets.pricing_params(psindx,assets.pricing_params_col.FutureCostEst));                        
 
                             %% NEW PARAMETER FILES NEED THIS
-                            FutureCostEst = (cindxs>=1).*(assets.pricing_params(cindxs,assets.pricing_params_col.FutureCostEst)');                        
+                            for k=1:length(unique(COMPOUND_TYPES))
+                                % future cost
+                                tmpFlag = COMPOUND_TYPES==k;
+                                tmp = (cindxs>=1).*(assets(k).pricing_params(cindxs,assets(k).pricing_params_col.FutureCostEst)');
+                                FutureCostEst(tmpFlag) = tmp(tmpFlag);
+                            end
                             for ctr = 1:NCOMPOUNDS
                                if STARTING_PERIOD(ctr) < i & acquired(ctr)
                                    cash_to_invest = cash_to_invest - FutureCostEst(ctr);
