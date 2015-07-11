@@ -1,4 +1,6 @@
-%This function initializes all parameters used by the simulation code
+%This version uses the orphan drug parameters discussed in Simulation A of 
+%"Commercializing biomedical research through securitization techniques" Fernandez et al. 2012.
+%@params is of type struct and has 4 fields simu (simulation parameters), 
 %The function contains all default values used in the code
 %Input:
 %Output:
