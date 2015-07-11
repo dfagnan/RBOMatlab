@@ -95,7 +95,7 @@ function params = init_params_fn_DDT_geometric()
 	% Interest coverage ratios
 	% e.g. hold cash equal to 1.75x future senior tranche interest & coupon
 	% and 3.5x the future junior tranche interest & coupon
-    bonds.interest_coverage = [1.75, 3.5,  0];  %A1, A2, EQ
+    bonds.interest_coverage = [1.75, 2.75,  0];  %A1, A2, EQ
     bonds.interest_coverage_col = bonds.capital_structure_col;
 
 	%Bond amortization schedule.
